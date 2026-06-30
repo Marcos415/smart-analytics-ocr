@@ -85,7 +85,8 @@ def generar_pdf_bytes():
         pdf.set_font("Arial", "", 9)
         pdf.set_text_color(0, 0, 0)
         
-        for linha in lines:
+        # CORRIGIDO: Agora usando a variável correta 'linhas'
+        for linha in linhas:
             if ":" in linha:
                 parts = linha.split(":", 1)
                 campo_limpo = parts[0].replace("=== ", "").replace(" ===", "").strip()
@@ -118,7 +119,6 @@ with tab2:
     st.header("Extração de Texto de Documentos (OCR)")
     st.write("Faça o upload de uma imagem ou arquivo PDF de um documento para extrair os textos em tempo real.")
     
-    # AGORA ACEITA PDF TAMBÉM!
     arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"])
     
     col1, col2 = st.columns(2)
@@ -128,10 +128,8 @@ with tab2:
         imagem_para_ocr = None
         
         if arquivo_doc is not None:
-            # Identifica se é PDF ou Imagem comum
             if arquivo_doc.name.lower().endswith('.pdf'):
                 try:
-                    # Converte a primeira página do PDF em imagem de forma dinâmica
                     paginas = convert_from_bytes(arquivo_doc.read(), first_page=1, last_page=1)
                     if paginas:
                         imagem_para_ocr = paginas[0]
@@ -142,7 +140,6 @@ with tab2:
                 imagem_para_ocr = Image.open(arquivo_doc)
                 st.image(imagem_para_ocr, caption="Imagem Carregada", use_container_width=True)
             
-            # Botão de Execução
             if imagem_para_ocr is not None and st.button("🚀 Executar Leitura OCR", type="primary"):
                 with st.spinner("Processando documento com IA..."):
                     reader = easyocr.Reader(['pt', 'en'])
