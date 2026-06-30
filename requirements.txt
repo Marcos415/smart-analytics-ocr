@@ -3,4 +3,3 @@ easyocr
 numpy
 Pillow
 fpdf2
-pdf2image
