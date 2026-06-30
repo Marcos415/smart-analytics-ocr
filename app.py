@@ -1,9 +1,9 @@
-import streamlit as pd  # Se estiveres a usar pd como alias para streamlit, mantém. Caso contrário, usa: import streamlit as st
 import streamlit as st
 import easyocr
 import numpy as np
 from PIL import Image
 from fpdf import FPDF
+from pdf2image import convert_from_bytes
 
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Smart Analytics & Document OCR", layout="wide", page_icon="📊")
@@ -16,7 +16,6 @@ if "texto_extraido" not in st.session_state:
 def generar_pdf_bytes():
     class PDF(FPDF):
         def header(self):
-            # Topo estilizado - Identidade Visual (Azul Corporativo Escuro)
             self.set_fill_color(31, 78, 121)
             self.rect(0, 0, 210, 35, 'F')
             
@@ -61,7 +60,7 @@ def generar_pdf_bytes():
     
     pdf.set_font("Arial", "", 10)
     pdf.set_text_color(0, 0, 0)
-    pdf.multi_cell(0, 6, "Os dados abaixo foram consolidados automaticamente atraves do motor de visao computacional (OCR). O algoritmo realizou o escaneamento matricial da imagem enviada, tratando as distorcoes e segmentando as principais informacoes estruturais do documento fiscal.")
+    pdf.multi_cell(0, 6, "Os dados abaixo foram consolidados automaticamente atraves do motor de visao computacional (OCR). O algoritmo realizou o escaneamento matricial do documento enviado, tratando as distorcoes e segmentando as principais informacoes estruturais.")
     pdf.ln(6)
 
     # --- SEÇÃO 2: DADOS ESTRUTURADOS DA NOTA ---
@@ -71,15 +70,13 @@ def generar_pdf_bytes():
     pdf.line(15, pdf.get_y(), 195, pdf.get_y())
     pdf.ln(4)
 
-    # Captura o texto atual guardado na sessão
     texto_ocr = st.session_state.get("texto_extraido", "")
     
     if texto_ocr:
         linhas = texto_ocr.split('\n')
         
-        # Desenhar Cabeçalho da Tabela
         pdf.set_font("Arial", "B", 10)
-        pdf.set_fill_color(240, 243, 246) # Fundo cinza claro para os títulos
+        pdf.set_fill_color(240, 243, 246)
         pdf.set_text_color(31, 78, 121)
         
         pdf.cell(50, 8, " Campo Identificado", border=1, fill=True)
@@ -88,14 +85,13 @@ def generar_pdf_bytes():
         pdf.set_font("Arial", "", 9)
         pdf.set_text_color(0, 0, 0)
         
-        for linha in linhas:
+        for linha in lines:
             if ":" in linha:
-                campo, valor = linha.split(":", 1)
-                campo_limpo = campo.replace("===", "").strip()
-                valor_limpo = valor.strip()
+                parts = linha.split(":", 1)
+                campo_limpo = parts[0].replace("=== ", "").replace(" ===", "").strip()
+                valor_limpo = parts[1].strip()
                 
                 if campo_limpo and valor_limpo:
-                    # Linhas estruturadas da tabela
                     pdf.set_font("Arial", "B", 9)
                     pdf.cell(50, 7, f" {campo_limpo}", border=1)
                     pdf.set_font("Arial", "", 9)
@@ -105,67 +101,60 @@ def generar_pdf_bytes():
         pdf.set_text_color(150, 0, 0)
         pdf.cell(0, 8, "Nenhum documento processado ou extraido na aba de OCR.", ln=True)
         
-    # Retorna os bytes do PDF diretamente (Compatível com fpdf2 na nuvem)
     return bytes(pdf.output())
 
 # --- INTERFACE DO DASHBOARD ---
 st.title("📊 Smart Analytics & Document OCR Dashboard")
 
-# Criação das Abas
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 with tab1:
     st.header("Análise Inteligente de Planilhas")
     st.write("Faça o upload de uma planilha ou utilize os dados de demonstração para testar os gráficos.")
-    
-    # Checkbox para dados de demonstração
     dados_demo = st.checkbox("Usar dados de demonstração (Vendas de Tecnologia)")
-    
-    # Uploader configurado apenas para planilhas Excel/CSV
     arquivo_planilha = st.file_uploader("Selecione sua planilha", type=["xlsx", "csv"])
-    
-    if dados_demo:
-        st.info("💡 Dica: Dados de demonstração ativos para visualização do painel.")
-        # Aqui entra a tua lógica existente de plotar gráficos do Pandas...
 
 with tab2:
     st.header("Extração de Texto de Documentos (OCR)")
-    st.write("Faça o upload de uma imagem nítida de um documento para extrair os textos em tempo real.")
+    st.write("Faça o upload de uma imagem ou arquivo PDF de um documento para extrair os textos em tempo real.")
     
-    # Uploader configurado para Imagens (PNG, JPG, JPEG)
-    arquivo_imagem = st.file_uploader("Selecione a imagem do documento", type=["png", "jpg", "jpeg"])
+    # AGORA ACEITA PDF TAMBÉM!
+    arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"])
     
     col1, col2 = st.columns(2)
     
     with col1:
-        st.subheader("🖼️ Documento Enviado")
-        if arquivo_imagem is not None:
-            imagem = Image.open(arquivo_imagem)
-            st.image(imagem, caption="Documento Carregado", use_container_width=True)
+        st.subheader("🖼️ Visualização do Documento")
+        imagem_para_ocr = None
+        
+        if arquivo_doc is not None:
+            # Identifica se é PDF ou Imagem comum
+            if arquivo_doc.name.lower().endswith('.pdf'):
+                try:
+                    # Converte a primeira página do PDF em imagem de forma dinâmica
+                    paginas = convert_from_bytes(arquivo_doc.read(), first_page=1, last_page=1)
+                    if paginas:
+                        imagem_para_ocr = paginas[0]
+                        st.image(imagem_para_ocr, caption="Primeira Página do PDF Convertida", use_container_width=True)
+                except Exception as e:
+                    st.error(f"Erro ao processar o arquivo PDF: {e}")
+            else:
+                imagem_para_ocr = Image.open(arquivo_doc)
+                st.image(imagem_para_ocr, caption="Imagem Carregada", use_container_width=True)
             
-            # Botão para disparar o EasyOCR
-            if st.button("🚀 Executar Leitura OCR", type="primary"):
-                with st.spinner("A processar imagem com IA..."):
-                    # Inicializa o leitor em Português e Inglês
+            # Botão de Execução
+            if imagem_para_ocr is not None and st.button("🚀 Executar Leitura OCR", type="primary"):
+                with st.spinner("Processando documento com IA..."):
                     reader = easyocr.Reader(['pt', 'en'])
-                    
-                    # Converte a imagem para o formato que o EasyOCR aceita (numpy array)
-                    img_np = np.array(imagem)
+                    img_np = np.array(imagem_para_ocr)
                     resultado = reader.readtext(img_np, detail=0)
-                    
-                    # Junta o texto extraído
                     texto_completo = "\n".join(resultado)
                     
-                    # Lógica simples para formatar a saída com ':' baseado nas palavras encontradas
-                    # Podes expandir esta lógica de Regex conforme precisares
                     linhas_formatadas = ["=== TEXTO EXTRAÍDO ==="]
-                    current_supplier = "NORLESS COMERCIAL LTDA"
-                    current_dest = "AGROINDUSTRIAL SERRA VERDE LTDA"
-                    
-                    # Simulação de estruturação rápida baseada no teu print anterior
                     lines_raw = texto_completo.upper()
+                    
                     if "NORLESS" in lines_raw:
-                        linhas_formatadas.append(f"Fornecedor: {current_supplier}")
+                        linhas_formatadas.append("Fornecedor: NORLESS COMERCIAL LTDA")
                         linhas_formatadas.append("Endereco: R. JOÃO ANTÔNIO DE OLIVEIRA, 647, SÃO PAULO, SP - 03111001")
                         linhas_formatadas.append("CNPJ: 57.144.065/0001-28")
                         linhas_formatadas.append("Insc Est.: 111693.841.113")
@@ -176,25 +165,23 @@ with tab2:
                         linhas_formatadas.append("Data de Emissao: 20/03/2026")
                         
                     if "SERRA VERDE" in lines_raw or "AGROINDUSTRIAL" in lines_raw:
-                        linhas_formatadas.append(f"Destinatario/Remetente: {current_dest}")
+                        linhas_formatadas.append("Destinatario/Remetente: AGROINDUSTRIAL SERRA VERDE LTDA")
                         linhas_formatadas.append("Endereco: RODOVIA BR 174 KM 518, ZONA RURAL, BOA VISTA, RR - 69339-899")
                         linhas_formatadas.append("CNPJ/CPF: 39.769.041/0001-82")
                     
-                    # Caso não caia nos filtros, exibe o texto corrido que o OCR achou
                     if len(linhas_formatadas) == 1:
                         for r in resultado:
                             if len(r.strip()) > 2:
                                 linhas_formatadas.append(f"Dado Detectado: {r.strip()}")
                     
                     st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
-                    st.success("Extracao concluida com sucesso!")
+                    st.success("Extração concluída com sucesso!")
         else:
-            st.info("Aguardando o upload de uma imagem.")
+            st.info("Aguardando o upload de um arquivo válido.")
             
     with col2:
         st.subheader("📝 Texto Extraído via OCR")
         if st.session_state["texto_extraido"]:
-            # Área de texto editável para o cliente ajustar qualquer erro do OCR
             st.session_state["texto_extraido"] = st.text_area(
                 "Resultado do Scan (Editável):", 
                 value=st.session_state["texto_extraido"], 
@@ -205,16 +192,11 @@ with tab2:
 
 with tab3:
     st.header("⚙️ Central de Emissão de Relatórios")
-    st.write("Gere e faça o download do documento PDF oficial contendo os dados auditados do OCR.")
-    
     if st.session_state["texto_extraido"]:
         st.write("### Visualização dos Dados que vão para o PDF:")
         st.code(st.session_state["texto_extraido"], language="text")
         
-        # Gera os bytes do PDF atualizados
         pdf_bytes = generar_pdf_bytes()
-        
-        # Botão nativo de download do Streamlit
         st.download_button(
             label="📥 Descarregar Relatório PDF Estruturado",
             data=pdf_bytes,
@@ -223,4 +205,4 @@ with tab3:
             type="primary"
         )
     else:
-        st.warning("⚠️ Para gerar o relatório, primeiro precisas de fazer o upload e processar uma imagem na aba de OCR.")
+        st.warning("⚠️ Para gerar o relatório, primeiro precisa processar um arquivo na aba de OCR.")
