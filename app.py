@@ -180,7 +180,8 @@ with aba_relatorio:
         else:
             pdf.cell(0, 8, "Nenhum documento processado na aba de OCR.", ln=True)
             
-        return pdf.output().encode('latin-1')
+        # O fpdf2 moderno aceita retornar em formato de string de bytes destrutiva se passarmos vazio ou usar output direto
+        return bytes(pdf.output())
 
     # Executa a geração e entrega os bytes estáveis para download
     pdf_output = generar_pdf_bytes()
