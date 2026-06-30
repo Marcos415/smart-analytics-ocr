@@ -1,8 +1,6 @@
 streamlit
-pandas
-plotly
-pillow
 easyocr
 numpy
+Pillow
 fpdf2
-openpyxl
+pdf2image
