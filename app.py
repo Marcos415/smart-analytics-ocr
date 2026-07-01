@@ -10,6 +10,7 @@ import altair as alt
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Smart Analytics & Document OCR", layout="wide", page_icon="📊")
 
+# Inicializa o estado se não existir
 if "texto_extraido" not in st.session_state:
     st.session_state["texto_extraido"] = ""
 
@@ -66,7 +67,7 @@ st.title("📊 Smart Analytics & Document OCR Dashboard")
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 # ==========================================
-# ABA 1: ANÁLISE DE DADOS (BI DINÂMICO NATIVO)
+# ABA 1: ANÁLISE DE DADOS
 # ==========================================
 with tab1:
     st.header("Análise Inteligente de Planilhas")
@@ -81,7 +82,6 @@ with tab1:
             
             st.success("Planilha carregada com sucesso!")
             
-            # Tratamento automático temporal com Pandas
             if 'Data' in df.columns:
                 df['Data'] = pd.to_datetime(df['Data'])
                 df['Ano'] = df['Data'].dt.year
@@ -113,9 +113,6 @@ with tab1:
                 
                 df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
                 
-                st.write("📊 **Clique direto em uma barra** para filtrar o painel inteiro. **Clique no fundo branco** do gráfico para limpar o filtro:")
-                
-                # Engenharia do gráfico interativo com Altair
                 selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
                 grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
@@ -132,19 +129,15 @@ with tab1:
                 
                 res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
-                # Base padrão: Tudo selecionado
                 df_final_exibicao = df.copy()
                 valor_clicado = None
                 
-                # Mapeamento do clique dinâmico (Altair para Pandas)
                 if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
-                    
                     if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
                         lista_valores = dados_selecionados[eixo_tempo]
                         if lista_valores and len(lista_valores) > 0:
                             valor_clicado = lista_valores[0]
-                            
                     elif isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
                         primeiro_ponto = dados_selecionados[0]
                         if isinstance(primeiro_ponto, dict) and eixo_tempo in primeiro_ponto:
@@ -156,7 +149,6 @@ with tab1:
                 else:
                     st.info("🌐 Exibindo Totais Consolidados (Ano Completo)")
                 
-                # Métricas Reativas ao Clique
                 col_m1, col_m2, col_m3 = st.columns(3)
                 col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
                 col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
@@ -164,28 +156,26 @@ with tab1:
                 
                 st.write("### 📋 Detalhamento dos Registros")
                 st.dataframe(df_final_exibicao.head(20))
-                
             else:
                 st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda'.")
-                
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR DINÂMICO E SEGURO (SEM RERUN)
+# ABA 2: EXTRATOR OCR (ESTABILIZADO COM KEY FIXA)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
     arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"])
     
-    if arquivo_doc is not None:
-        is_pdf = arquivo_doc.name.lower().endswith('.pdf')
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            st.subheader("🖼️ Documento Enviado")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("🖼️ Documento Enviado")
+        if arquivo_doc is not None:
+            is_pdf = arquivo_doc.name.lower().endswith('.pdf')
             if is_pdf:
-                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}. Clique no botão para extrair os dados estruturados.")
+                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}.")
             else:
                 imagem = Image.open(arquivo_doc)
                 st.image(imagem, caption="Imagem Carregada", use_container_width=True)
@@ -202,91 +192,87 @@ with tab2:
                             texto_cru = "\n".join(paginas_texto)
                             linhas_originais = texto_cru.split('\n')
                         except Exception as pdf_err:
-                            st.error(f"Erro ao ler as camadas de texto do PDF: {pdf_err}")
+                            st.error(f"Erro ao ler PDF: {pdf_err}")
                     else:
-                        reader = easyocr.Reader(['pt', 'en'])
-                        img_np = np.array(imagem)
-                        resultado = reader.readtext(img_np, detail=0)
-                        texto_cru = "\n".join(resultado)
-                        linhas_originais = resultado
+                        try:
+                            reader = easyocr.Reader(['pt', 'en'])
+                            img_np = np.array(imagem)
+                            resultado = reader.readtext(img_np, detail=0)
+                            texto_cru = "\n".join(resultado)
+                            linhas_originais = resultado
+                        except Exception as ocr_err:
+                            st.error(f"Erro no EasyOCR: {ocr_err}")
                     
-                    # Normalização estrutural de strings
-                    linhas_maiusculas = [l.upper().strip() for l in linhas_originais if l.strip()]
-                    text_completo_upper = "\n".join(linhas_maiusculas)
-                    
-                    # Definição dos buffers de metadados padrão
-                    fornecedor = "Não identificado claramente (Ajuste ao lado)"
-                    destinatario = "Não identificado claramente (Ajuste ao lado)"
-                    num_nota = "Não localizado"
-                    data_emissao = "Não localizada"
-                    cnpj_detectado = "Não localizado"
-                    
-                    # 1. Identificação direta por padrões conhecidos (Camada rápida)
-                    if "NORLESS" in text_completo_upper:
-                        fornecedor = "NORLESS COMERCIAL LTDA"
-                    if "SERRA VERDE" in text_completo_upper:
-                        destinatario = "AGROINDUSTRIAL SERRA VERDE LTDA"
+                    if linhas_originais:
+                        linhas_maiusculas = [l.upper().strip() for l in linhas_originais if l.strip()]
+                        text_completo_upper = "\n".join(linhas_maiusculas)
                         
-                    # 2. Varredura posicional inteligente e blindada contra estouro de índice
-                    for idx, linha in enumerate(linhas_maiusculas):
-                        if "CNPJ" in linha or "C.N.P.J" in linha:
-                            cnpj_detectado = linhas_originais[idx].strip()
+                        fornecedor = "Não identificado claramente (Ajuste ao lado)"
+                        destinatario = "Não identificado claramente (Ajuste ao lado)"
+                        num_nota = "Não localizado"
+                        data_emissao = "Não localizada"
+                        cnpj_detectado = "Não localizado"
                         
-                        # Captura contextual do Fornecedor (De Quem)
-                        if fornecedor.startswith("Não identificado"):
-                            if "EMITENTE" in linha or "FORNECEDOR" in linha or "RAZAO SOCIAL" in linha:
+                        if "NORLESS" in text_completo_upper:
+                            fornecedor = "NORLESS COMERCIAL LTDA"
+                        if "SERRA VERDE" in text_completo_upper:
+                            destinatario = "AGROINDUSTRIAL SERRA VERDE LTDA"
+                            
+                        for idx, linha in enumerate(linhas_maiusculas):
+                            if "CNPJ" in linha or "C.N.P.J" in linha:
+                                cnpj_detectado = linhas_originais[idx].strip()
+                            
+                            if fornecedor.startswith("Não identificado") and ("EMITENTE" in linha or "FORNECEDOR" in linha or "RAZAO" in linha):
                                 if idx + 1 < len(linhas_originais):
                                     fornecedor = linhas_originais[idx + 1].strip()
-                                    
-                        # Captura contextual do Destinatário (Para Quem)
-                        if destinatario.startswith("Não identificado"):
-                            if "DESTINATARIO" in linha or "CLIENTE" in linha or "REMETENTE" in linha:
+                                        
+                            if destinatario.startswith("Não identificado") and ("DESTINATARIO" in linha or "CLIENTE" in linha or "REMETENTE" in linha):
                                 if idx + 1 < len(linhas_originais):
-                                    destinatario = linhas_originais[idx + 1].strip()
-                                    
-                        # Captura limpa do Identificador numérico da nota
-                        if "NUMERO" in linha or "NF-E" in linha or "NOTA" in linha or "Nº" in linha:
-                            num_filtrado = ''.join(c for c in linha if c.isdigit() or c in ['.', '-'])
-                            if num_filtrado:
-                                num_nota = num_filtrado
-                        
-                        # Captura de marcos temporais
-                        if "EMISSAO" in linha or "DATA" in linha:
-                            if "/" in linha:
-                                data_emissao = linhas_originais[idx].strip()
+                                    destinatario = líneas_originais[idx + 1].strip() if 'líneas_originais' in locals() else linhas_originais[idx + 1].strip()
+                                        
+                            if "NUMERO" in linha or "NF-E" in linha or "NOTA" in linha or "Nº" in linha:
+                                num_filtrado = ''.join(c for c in linha if c.isdigit() or c in ['.', '-'])
+                                if num_filtrado:
+                                    num_nota = num_filtrado
+                            
+                            if "EMISSAO" in linha or "DATA" in linha:
+                                if "/" in linha:
+                                    data_emissao = linhas_originais[idx].strip()
 
-                    # Montagem do layout de exibição na caixa de texto do painel
-                    linhas_formatadas = [
-                        "=== INFORMAÇÕES ESTRUTURADAS DA NOTA ===",
-                        f"Fornecedor (De Quem): {fornecedor}",
-                        f"Destinatario (Para Quem): {destinatario}",
-                        f"Numero da Nota: {num_nota}",
-                        f"Data de Emissao: {data_emissao}",
-                        f"Dados de Registro: {cnpj_detectado}",
-                        "\n=== TEXTO COMPLETO RECONHECIDO NO SCAN ==="
-                    ]
-                    
-                    # Consolida todas as linhas lidas abaixo para fácil recuperação pelo usuário
-                    for l_orig in linhas_originais:
-                        if len(l_orig.strip()) > 1:
-                            linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
-                                
-                    st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
-                    st.success("Análise documental concluída!")
-                    
-        with col2:
-            st.subheader("📝 Metadados Estruturados & Ajuste Manual")
-            if st.session_state["texto_extraido"]:
-                st.session_state["texto_extraido"] = st.text_area(
-                    "Informações da Nota (Campos editáveis antes de gerar o PDF):", 
-                    value=st.session_state["texto_extraido"], 
-                    height=450
-                )
-            else:
-                st.info("Os dados extraídos da fatura/nota aparecerão estruturados aqui após a execução do scanner.")
+                        linhas_formatadas = [
+                            "=== INFORMAÇÕES ESTRUTURADAS DA NOTA ===",
+                            f"Fornecedor (De Quem): {fornecedor}",
+                            f"Destinatario (Para Quem): {destinatario}",
+                            f"Numero da Nota: {num_nota}",
+                            f"Data de Emissao: {data_emissao}",
+                            f"Dados de Registro: {cnpj_detectado}",
+                            "\n=== TEXTO COMPLETO RECONHECIDO NO SCAN ==="
+                        ]
+                        
+                        for l_orig in linhas_originais:
+                            if len(l_orig.strip()) > 1:
+                                linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
+                                    
+                        # Atualiza o session_state com o novo texto estruturado
+                        st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
+                        st.success("Análise documental concluída!")
+                        st.rerun()
+                    else:
+                        st.warning("⚠️ O scanner foi executado, mas nenhum caractere ou linha de texto foi detetado no ficheiro.")
+        else:
+            st.info("Aguardando upload de documento...")
+
+    with col2:
+        st.subheader("📝 Metadados Estruturados & Ajuste Manual")
+        # Vinculação direta usando a key estável do Streamlit
+        st.text_area(
+            "Informações da Nota (Campos editáveis antes de gerar o PDF):", 
+            key="texto_extraido", 
+            height=500
+        )
 
 # ==========================================
-# ABA 3: EMISSÃO DE DOCUMENTOS OFICIAIS
+# ABA 3: EMISSÃO DE DOCUMENTOS
 # ==========================================
 with tab3:
     st.header("⚙️ Central de Emissão de Relatórios")
