@@ -114,15 +114,12 @@ with tab1:
                 
                 st.write("📊 **Clique direto em uma barra** para filtrar o painel inteiro. **Clique no fundo branco** do gráfico para limpar o filtro:")
                 
-                # --- ENGENHARIA DO GRÁFICO INTERATIVO COM ALTAIR (COMPATÍVEL) ---
-                # Cria a seleção baseada em clique na barra
+                # --- ENGENHARIA DO GRÁFICO INTERATIVO COM ALTAIR ---
                 selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
-                # Constrói o gráfico de barras dinâmico
                 grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
                     x=alt.X(f'{eixo_tempo}:N', title=visao_tempo, sort=alt.EncodingSortField(field=eixo_tempo, order='ascending')),
                     y=alt.Y(f'{metrica_analise}:Q', title=metrica_analise),
-                    # Muda a opacidade da barra se ela não estiver selecionada
                     opacity=alt.condition(selecao_clique, alt.value(1.0), alt.value(0.35)),
                     tooltip=[eixo_tempo, metrica_analise]
                 ).add_params(
@@ -132,21 +129,36 @@ with tab1:
                     height=350
                 )
                 
-                # Renderiza o gráfico e captura os dados de retorno do evento de clique
                 res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
-                # Base padrão: Tudo selecionado
+                # Base padrão: Tudo selecionado (Ano Completo)
                 df_final_exibicao = df.copy()
+                valor_clicado = None
                 
-                # Captura o item selecionado pelo clique nativo do Altair
+                # LÓGICA DE EXTRAÇÃO E VALIDAÇÃO CORRIGIDA PARA FILTRAGEM
                 if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
-                    if dados_selecionados and eixo_tempo in dados_selecionados:
-                        valor_clicado = dados_selecionados[eixo_tempo][0]
-                        df_final_exibicao = df[df[eixo_tempo] == valor_clicado]
-                        st.info(f"⚡ Filtrado dinamicamente por: **{valor_clicado}**")
+                    
+                    # Formato 1: Dicionário de listas {'Mês': ['06 - June']}
+                    if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
+                        lista_valores = dados_selecionados[eixo_tempo]
+                        if lista_valores and len(lista_valores) > 0:
+                            valor_clicado = lista_valores[0]
+                            
+                    # Formato 2: Lista de dicionários [{'Mês': '06 - June'}]
+                    elif isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
+                        primeiro_ponto = dados_selecionados[0]
+                        if isinstance(primeiro_ponto, dict) and eixo_tempo in primeiro_ponto:
+                            valor_clicado = primeiro_ponto[eixo_tempo]
                 
-                # --- METRICAS REATIVAS AO CLIQUE ---
+                # Se houver valor clicado válido, aplica o filtro estrito no Pandas para recalculas as somas
+                if valor_clicado is not None:
+                    df_final_exibicao = df[df[eixo_tempo] == valor_clicado]
+                    st.info(f"⚡ Painel filtrado exclusivamente por: **{valor_clicado}**")
+                else:
+                    st.info("🌐 Exibindo Totais Consolidados (Ano Completo)")
+                
+                # --- METRICAS REATIVAS RECALCULADAS CORRETAMENTE ---
                 col_m1, col_m2, col_m3 = st.columns(3)
                 col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
                 col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
