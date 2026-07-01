@@ -172,7 +172,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR DINÂMICO E SEGURO (CORRIGIDO)
+# ABA 2: EXTRATOR OCR DINÂMICO CORRIGIDO (SEM ERROS)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -221,7 +221,7 @@ with tab2:
                     data_emissao = "Não localizada"
                     cnpj_detectado = "Não localizado"
                     
-                    # 1. Identificação direta por padrões conhecidos de mercado (Camada rápida)
+                    # 1. Identificação direta por padrões conhecidos (Camada rápida)
                     if "NORLESS" in text_completo_upper:
                         fornecedor = "NORLESS COMERCIAL LTDA"
                     if "SERRA VERDE" in text_completo_upper:
