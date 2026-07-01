@@ -16,50 +16,55 @@ if "texto_extraido" not in st.session_state:
 if "campo_texto_ocr" not in st.session_state:
     st.session_state["campo_texto_ocr"] = ""
 
-# --- FUNÇÃO PARA GERAR OS BYTES DO PDF DO RELATÓRIO ---
+# --- FUNÇÃO PARA GERAR OS BYTES DO PDF DO RELATÓRIO (CORRIGIDA CONTRA ACENTOS) ---
 def generar_pdf_bytes():
     class PDF(FPDF):
         def header(self):
             self.set_fill_color(31, 78, 121)
             self.rect(0, 0, 210, 35, 'F')
-            self.set_font("Arial", "B", 18)
+            self.set_font("Helvetica", "B", 16)
             self.set_text_color(255, 255, 255)
             self.cell(0, 10, "SMART ANALYTICS & DOCUMENT OCR", ln=True, align="C")
             self.ln(12)
         def footer(self):
             self.set_y(-15)
-            self.set_font("Arial", "I", 8)
+            self.set_font("Helvetica", "I", 8)
             self.set_text_color(128, 128, 128)
-            self.cell(0, 10, f"Página {self.page_no()}", align="C")
+            self.cell(0, 10, f"Pagina {self.page_no()}", align="C")
 
     pdf = PDF()
     pdf.set_margins(15, 15, 15)
     pdf.add_page()
     
-    pdf.set_font("Arial", "B", 12)
+    pdf.set_font("Helvetica", "B", 12)
     pdf.set_text_color(31, 78, 121)
-    pdf.cell(0, 8, "Informações Estruturadas do Documento", ln=True)
+    pdf.cell(0, 8, "Informacoes Estruturadas do Documento", ln=True)
     pdf.line(15, pdf.get_y(), 195, pdf.get_y())
     pdf.ln(4)
 
     texto_ocr = st.session_state.get("texto_extraido", "")
     if texto_ocr:
         linhas = texto_ocr.split('\n')
-        pdf.set_font("Arial", "B", 10)
+        pdf.set_font("Helvetica", "B", 10)
         pdf.set_fill_color(240, 243, 246)
         pdf.cell(60, 8, " Campo Identificado", border=1, fill=True)
-        pdf.cell(120, 8, " Conteúdo Extraído", border=1, fill=True, ln=True)
+        pdf.cell(120, 8, " Conteudo Extraido", border=1, fill=True, ln=True)
         
-        pdf.set_font("Arial", "", 9)
+        pdf.set_font("Helvetica", "", 9)
         for linha in linhas:
             if ":" in linha:
                 parts = linha.split(":", 1)
-                pdf.set_font("Arial", "B", 9)
-                pdf.cell(60, 7, f" {parts[0].strip()}", border=1)
-                pdf.set_font("Arial", "", 9)
-                pdf.cell(120, 7, f" {parts[1].strip()}", border=1, ln=True)
+                
+                # Tratamento estrito contra FPDFUnicodeEncodingException (Acentuação)
+                campo = parts[0].strip().encode('latin-1', 'ignore').decode('latin-1')
+                conteudo = parts[1].strip().encode('latin-1', 'ignore').decode('latin-1')
+                
+                pdf.set_font("Helvetica", "B", 9)
+                pdf.cell(60, 7, f" {campo}", border=1)
+                pdf.set_font("Helvetica", "", 9)
+                pdf.cell(120, 7, f" {conteudo}", border=1, ln=True)
     else:
-        pdf.cell(0, 8, "Nenhum dado extraído encontrado.", ln=True)
+        pdf.cell(0, 8, "Nenhum dado extraido encontrado.", ln=True)
         
     return bytes(pdf.output())
 
@@ -134,7 +139,7 @@ with tab1:
                 df_final_exibicao = df.copy()
                 valor_clicado = None
                 
-                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
+                if res_altair and "selection" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
                     if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
                         lista_valores = dados_selecionados[eixo_tempo]
@@ -164,7 +169,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR (SESSÃO REATIVA CORRIGIDA)
+# ABA 2: EXTRATOR OCR (CORRIGIDO PARA PDF E IMAGENS)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -239,7 +244,7 @@ with tab2:
                             
                             if "EMISSAO" in linha or "DATA" in linha:
                                 if "/" in linha:
-                                    data_emissao = Camp_orig = linhas_originais[idx].strip()
+                                    data_emissao = linhas_originais[idx].strip()
 
                         linhas_formatadas = [
                             "=== INFORMAÇÕES ESTRUTURADAS DA NOTA ===",
@@ -255,21 +260,19 @@ with tab2:
                             if len(l_orig.strip()) > 1:
                                 linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
                                     
-                        # Atualiza os dois buffers simultaneamente
                         conteudo_final = "\n".join(linhas_formatadas)
                         st.session_state["campo_texto_ocr"] = conteudo_final
                         st.session_state["texto_extraido"] = conteudo_final
                         st.success("Análise documental concluída!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ O scanner foi executado, mas não detectou texto na imagem.")
+                        st.warning("⚠️ O documento foi carregado, mas nenhum texto legível foi extraído.")
         else:
             st.info("Aguardando upload de documento...")
 
     with col2:
         st.subheader("📝 Metadados Estruturados & Ajuste Manual")
         
-        # Garante a sincronia de inicialização do widget
         val_inicial = st.session_state.get("campo_texto_ocr", "")
         
         texto_editado = st.text_area(
@@ -278,7 +281,6 @@ with tab2:
             key="campo_texto_ocr_widget",
             height=500
         )
-        # Mantém as alterações do usuário salvas na sessão global do relatório
         st.session_state["texto_extraido"] = texto_editado
         st.session_state["campo_texto_ocr"] = texto_editado
 
