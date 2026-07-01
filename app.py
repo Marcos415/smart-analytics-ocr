@@ -162,7 +162,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR (ESTABILIZADO COM KEY FIXA)
+# ABA 2: EXTRATOR OCR (SESSÃO REATIVA DEFINITIVA)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -228,7 +228,7 @@ with tab2:
                                         
                             if destinatario.startswith("Não identificado") and ("DESTINATARIO" in linha or "CLIENTE" in linha or "REMETENTE" in linha):
                                 if idx + 1 < len(linhas_originais):
-                                    destinatario = líneas_originais[idx + 1].strip() if 'líneas_originais' in locals() else linhas_originais[idx + 1].strip()
+                                    destinatario = linhas_originais[idx + 1].strip()
                                         
                             if "NUMERO" in linha or "NF-E" in linha or "NOTA" in linha or "Nº" in linha:
                                 num_filtrado = ''.join(c for c in linha if c.isdigit() or c in ['.', '-'])
@@ -253,7 +253,8 @@ with tab2:
                             if len(l_orig.strip()) > 1:
                                 linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
                                     
-                        # Atualiza o session_state com o novo texto estruturado
+                        # SOLUÇÃO DEFINITIVA: Atualiza diretamente a chave do widget no session_state antes do rerun
+                        st.session_state["campo_texto_ocr"] = "\n".join(linhas_formatadas)
                         st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
                         st.success("Análise documental concluída!")
                         st.rerun()
@@ -264,12 +265,19 @@ with tab2:
 
     with col2:
         st.subheader("📝 Metadados Estruturados & Ajuste Manual")
-        # Vinculação direta usando a key estável do Streamlit
-        st.text_area(
+        
+        # Garante que a chave do widget exista no estado para evitar conflitos de renderização
+        if "campo_texto_ocr" not in st.session_state:
+            st.session_state["campo_texto_ocr"] = st.session_state["texto_extraido"]
+            
+        # O text_area monitoriza a chave interativa 'campo_texto_ocr'
+        texto_editado = st.text_area(
             "Informações da Nota (Campos editáveis antes de gerar o PDF):", 
-            key="texto_extraido", 
+            key="campo_texto_ocr", 
             height=500
         )
+        # Sincroniza o buffer global do relatório com o que está escrito no ecrã
+        st.session_state["texto_extraido"] = texto_editado
 
 # ==========================================
 # ABA 3: EMISSÃO DE DOCUMENTOS
