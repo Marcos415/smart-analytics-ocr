@@ -49,7 +49,7 @@ def generar_pdf_bytes():
         pdf.set_font("Arial", "", 9)
         for linha in linhas:
             if ":" in linha:
-                parts = linha.split(":", 1)
+                parts = inline.split(":", 1)
                 pdf.set_font("Arial", "B", 9)
                 pdf.cell(60, 7, f" {parts[0].strip()}", border=1)
                 pdf.set_font("Arial", "", 9)
@@ -77,25 +77,22 @@ with tab1:
             
             st.success("Planilha carregada com sucesso!")
             
-            # --- TRATAMENTO AUTOMÁTICO TEMPORAL COM PANDAS ---
+            # Tratamento automático temporal com Pandas
             if 'Data' in df.columns:
                 df['Data'] = pd.to_datetime(df['Data'])
                 df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.strftime('%m - %B') # Ex: 06 - June
-                df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A') # Ex: 1 - Monday
+                df['Mês'] = df['Data'].dt.strftime('%m - %B')
+                df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A')
                 df['Semana_Ano'] = "Semana " + df['Data'].dt.isocalendar().week.astype(str)
             
-            st.dataframe(df.head(10))
-            
-            # --- BLOCO DE ANÁLISE GERENCIAL CRÍTICA ---
+            # --- BLOCO DE ANÁLISE GERENCIAL ---
             st.subheader("🎯 Painel de Controle de Tomada de Decisão")
             
             if 'Data' in df.columns and 'Total_Venda' in df.columns:
-                # Controles laterais ou em colunas superiores para fatiar o tempo
                 c1, c2 = st.columns(2)
                 with c1:
                     visao_tempo = st.selectbox(
-                        "Escolha o período para analisar:",
+                        "Escolha o período do gráfico:",
                         ["Visão por Mês (Ano Completo)", "Visão por Semana (Foco de Curto Prazo)", "Visão por Dia da Semana (Operacional)"]
                     )
                 with c2:
@@ -104,7 +101,6 @@ with tab1:
                         ["Total_Venda", "Quantidade"]
                     )
                 
-                # Aplicação da agregação de dados com base na escolha
                 if visao_tempo == "Visão por Mês (Ano Completo)":
                     eixo_tempo = 'Mês'
                 elif visao_tempo == "Visão por Semana (Foco de Curto Prazo)":
@@ -112,21 +108,43 @@ with tab1:
                 else:
                     eixo_tempo = 'Dia_Semana'
                 
-                # Agrupamento puro Pandas
-                df_filtrado = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
-                df_filtrado = df_filtrado.sort_values(by=eixo_tempo).set_index(eixo_tempo)
+                # Preparar dataframe agrupado para o gráfico
+                df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
+                df_grafico = df_grafico.sort_values(by=eixo_tempo).set_index(eixo_tempo)
                 
-                st.write(f"📊 Demonstrativo consolidado de **{metrica_analise}** sob a **{visao_tempo}**:")
-                st.bar_chart(df_filtrado)
+                # Renderização estável do gráfico (removido on_select)
+                st.bar_chart(df_grafico)
                 
-                # Resumo executivo em métricas numéricas abaixo do gráfico
+                # --- FILTRO DINÂMICO COMPATÍVEL ---
+                st.write("---")
+                st.write("### 🔍 Inspeção Detalhada e Filtro de Período")
+                
+                # Gera as opções únicas do período selecionado para o utilizador filtrar
+                opcoes_filtro = sorted(df[eixo_tempo].dropna().unique().tolist())
+                item_selecionado = st.selectbox(
+                    f"Selecione um item de **{eixo_tempo}** para detalhar os KPIs e registros abaixo:",
+                    ["Ver Ano Completo / Todos"] + opcoes_filtro
+                )
+                
+                # Variável base filtrada
+                if item_selecionado == "Ver Ano Completo / Todos":
+                    df_final_exibicao = df.copy()
+                else:
+                    df_final_exibicao = df[df[eixo_tempo] == item_selecionado]
+                    st.info(f"📊 Exibindo métricas exclusivas de: **{item_selecionado}**")
+                
+                # --- METRICAS REATIVAS ---
                 col_m1, col_m2, col_m3 = st.columns(3)
-                col_m1.metric("Investimento Total acumulado", f"R$ {df['Total_Venda'].sum():,.2f}")
-                col_m2.metric("Média por transação", f"R$ {df['Total_Venda'].mean():,.2f}")
-                col_m3.metric("Volume Total de Itens", f"{int(df['Quantidade'].sum())} un")
+                col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
+                col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
+                col_m3.metric("Volume de Itens Alocados", f"{int(df_final_exibicao['Quantidade'].sum())} un")
+                
+                # Exibição da tabela dinâmica filtrada embaixo
+                st.write("### 📋 Detalhamento dos Registros")
+                st.dataframe(df_final_exibicao.head(20))
                 
             else:
-                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda' para habilitar a inteligência temporal.")
+                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda'.")
                 
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
@@ -142,7 +160,7 @@ with tab2:
         with col1:
             st.subheader("🖼️ Documento Enviado")
             if is_pdf:
-                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}. Clique no botão para extrair os dados nativos.")
+                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}. Clique no botão para extrair os dados.")
             else:
                 imagem = Image.open(arquivo_doc)
                 st.image(imagem, caption="Imagem Carregada", use_container_width=True)
