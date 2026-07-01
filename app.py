@@ -10,9 +10,11 @@ import altair as alt
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Smart Analytics & Document OCR", layout="wide", page_icon="📊")
 
-# Inicializa o estado se não existir
+# Inicializa as variáveis no session_state para evitar conflitos de renderização
 if "texto_extraido" not in st.session_state:
     st.session_state["texto_extraido"] = ""
+if "campo_texto_ocr" not in st.session_state:
+    st.session_state["campo_texto_ocr"] = ""
 
 # --- FUNÇÃO PARA GERAR OS BYTES DO PDF DO RELATÓRIO ---
 def generar_pdf_bytes():
@@ -162,7 +164,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR (SESSÃO REATIVA DEFINITIVA)
+# ABA 2: EXTRATOR OCR (SESSÃO REATIVA CORRIGIDA)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -237,7 +239,7 @@ with tab2:
                             
                             if "EMISSAO" in linha or "DATA" in linha:
                                 if "/" in linha:
-                                    data_emissao = linhas_originais[idx].strip()
+                                    data_emissao = Camp_orig = linhas_originais[idx].strip()
 
                         linhas_formatadas = [
                             "=== INFORMAÇÕES ESTRUTURADAS DA NOTA ===",
@@ -253,31 +255,32 @@ with tab2:
                             if len(l_orig.strip()) > 1:
                                 linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
                                     
-                        # SOLUÇÃO DEFINITIVA: Atualiza diretamente a chave do widget no session_state antes do rerun
-                        st.session_state["campo_texto_ocr"] = "\n".join(linhas_formatadas)
-                        st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
+                        # Atualiza os dois buffers simultaneamente
+                        conteudo_final = "\n".join(linhas_formatadas)
+                        st.session_state["campo_texto_ocr"] = conteudo_final
+                        st.session_state["texto_extraido"] = conteudo_final
                         st.success("Análise documental concluída!")
                         st.rerun()
                     else:
-                        st.warning("⚠️ O scanner foi executado, mas nenhum caractere ou linha de texto foi detetado no ficheiro.")
+                        st.warning("⚠️ O scanner foi executado, mas não detectou texto na imagem.")
         else:
             st.info("Aguardando upload de documento...")
 
     with col2:
         st.subheader("📝 Metadados Estruturados & Ajuste Manual")
         
-        # Garante que a chave do widget exista no estado para evitar conflitos de renderização
-        if "campo_texto_ocr" not in st.session_state:
-            st.session_state["campo_texto_ocr"] = st.session_state["texto_extraido"]
-            
-        # O text_area monitoriza a chave interativa 'campo_texto_ocr'
+        # Garante a sincronia de inicialização do widget
+        val_inicial = st.session_state.get("campo_texto_ocr", "")
+        
         texto_editado = st.text_area(
             "Informações da Nota (Campos editáveis antes de gerar o PDF):", 
-            key="campo_texto_ocr", 
+            value=val_inicial,
+            key="campo_texto_ocr_widget",
             height=500
         )
-        # Sincroniza o buffer global do relatório com o que está escrito no ecrã
+        # Mantém as alterações do usuário salvas na sessão global do relatório
         st.session_state["texto_extraido"] = texto_editado
+        st.session_state["campo_texto_ocr"] = texto_editado
 
 # ==========================================
 # ABA 3: EMISSÃO DE DOCUMENTOS
