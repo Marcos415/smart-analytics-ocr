@@ -5,3 +5,4 @@ Pillow
 fpdf2
 pandas
 openpyxl
+pypdf
