@@ -13,8 +13,6 @@ st.set_page_config(page_title="Smart Analytics & Document OCR", layout="wide", p
 # Inicializa as variáveis no session_state para evitar conflitos de renderização
 if "texto_extraido" not in st.session_state:
     st.session_state["texto_extraido"] = ""
-if "campo_texto_ocr" not in st.session_state:
-    st.session_state["campo_texto_ocr"] = ""
 
 # --- FUNÇÃO PARA GERAR OS BYTES DO PDF DO RELATÓRIO (CORRIGIDA CONTRA ACENTOS) ---
 def generar_pdf_bytes():
@@ -74,7 +72,7 @@ st.title("📊 Smart Analytics & Document OCR Dashboard")
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 # ==========================================
-# ABA 1: ANÁLISE DE DADOS
+# ABA 1: ANÁLISE DE DADOS (INTERATIVIDADE REATIVADA)
 # ==========================================
 with tab1:
     st.header("Análise Inteligente de Planilhas")
@@ -120,6 +118,7 @@ with tab1:
                 
                 df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
                 
+                # Seleção por clique configurada no Altair
                 selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
                 grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
@@ -134,12 +133,14 @@ with tab1:
                     height=350
                 )
                 
+                # Executa o gráfico capturando a reexecução do Streamlit
                 res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
                 df_final_exibicao = df.copy()
                 valor_clicado = None
                 
-                if res_altair and "selection" in res_altair["selection"]:
+                # Recupera os dados da barra selecionada
+                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
                     if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
                         lista_valores = dados_selecionados[eixo_tempo]
@@ -169,7 +170,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR (CORRIGIDO PARA PDF E IMAGENS)
+# ABA 2: EXTRATOR OCR (CORRIGIDO E SEGURO)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -227,7 +228,7 @@ with tab2:
                             
                         for idx, linha in enumerate(linhas_maiusculas):
                             if "CNPJ" in linha or "C.N.P.J" in linha:
-                                cnpj_detectado = linhas_originais[idx].strip()
+                                cnpj_detectado = líneas_originais = linhas_originais[idx].strip()
                             
                             if fornecedor.startswith("Não identificado") and ("EMITENTE" in linha or "FORNECEDOR" in linha or "RAZAO" in linha):
                                 if idx + 1 < len(linhas_originais):
@@ -261,7 +262,6 @@ with tab2:
                                 linhas_formatadas.append(f"Detectado: {l_orig.strip()}")
                                     
                         conteudo_final = "\n".join(linhas_formatadas)
-                        st.session_state["campo_texto_ocr"] = conteudo_final
                         st.session_state["texto_extraido"] = conteudo_final
                         st.success("Análise documental concluída!")
                         st.rerun()
@@ -272,17 +272,11 @@ with tab2:
 
     with col2:
         st.subheader("📝 Metadados Estruturados & Ajuste Manual")
-        
-        val_inicial = st.session_state.get("campo_texto_ocr", "")
-        
-        texto_editado = st.text_area(
+        st.text_area(
             "Informações da Nota (Campos editáveis antes de gerar o PDF):", 
-            value=val_inicial,
-            key="campo_texto_ocr_widget",
+            key="texto_extraido", 
             height=500
         )
-        st.session_state["texto_extraido"] = texto_editado
-        st.session_state["campo_texto_ocr"] = texto_editado
 
 # ==========================================
 # ABA 3: EMISSÃO DE DOCUMENTOS
