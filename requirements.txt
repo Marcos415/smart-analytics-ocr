@@ -3,3 +3,5 @@ easyocr
 numpy
 Pillow
 fpdf2
+pandas
+openpyxl
