@@ -77,21 +77,18 @@ with tab1:
             
             st.success("Planilha carregada com sucesso!")
             
-            # --- TRATAMENTO AUTOMÁTICO TEMPORAL COM PANDAS ---
+            # Tratamento automático temporal com Pandas
             if 'Data' in df.columns:
                 df['Data'] = pd.to_datetime(df['Data'])
                 df['Ano'] = df['Data'].dt.year
-                df['Mês'] = df['Data'].dt.strftime('%m - %B') # Ex: 06 - June
-                df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A') # Ex: 1 - Monday
+                df['Mês'] = df['Data'].dt.strftime('%m - %B')
+                df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A')
                 df['Semana_Ano'] = "Semana " + df['Data'].dt.isocalendar().week.astype(str)
-            
-            st.dataframe(df.head(10))
             
             # --- BLOCO DE ANÁLISE GERENCIAL CRÍTICA ---
             st.subheader("🎯 Painel de Controle de Tomada de Decisão")
             
             if 'Data' in df.columns and 'Total_Venda' in df.columns:
-                # Controles laterais ou em colunas superiores para fatiar o tempo
                 c1, c2 = st.columns(2)
                 with c1:
                     visao_tempo = st.selectbox(
@@ -104,7 +101,6 @@ with tab1:
                         ["Total_Venda", "Quantidade"]
                     )
                 
-                # Aplicação da agregação de dados com base na escolha
                 if visao_tempo == "Visão por Mês (Ano Completo)":
                     eixo_tempo = 'Mês'
                 elif visao_tempo == "Visão por Semana (Foco de Curto Prazo)":
@@ -112,21 +108,40 @@ with tab1:
                 else:
                     eixo_tempo = 'Dia_Semana'
                 
-                # Agrupamento puro Pandas
-                df_filtrado = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
-                df_filtrado = df_filtrado.sort_values(by=eixo_tempo).set_index(eixo_tempo)
+                # Preparar dataframe agrupado para o gráfico
+                df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
+                df_grafico = df_grafico.sort_values(by=eixo_tempo).set_index(eixo_tempo)
                 
-                st.write(f"📊 Demonstrativo consolidado de **{metrica_analise}** sob a **{visao_tempo}**:")
-                st.bar_chart(df_filtrado)
+                st.write(f"📊 Clique em uma barra do gráfico para filtrar as tabelas e métricas automaticamente:")
                 
-                # Resumo executivo em métricas numéricas abaixo do gráfico
+                # --- GRÁFICO INTERATIVO COM SELEÇÃO ATIVA ---
+                evento_selecao = st.bar_chart(df_grafico, on_select="rerun")
+                
+                # Variável base de dados que será exibida e calculada nos cards
+                df_final_exibicao = df.copy()
+                
+                # Verificar se o usuário clicou/selecionou alguma barra do gráfico
+                if evento_selecao and "selection" in evento_selecao and "points" in evento_selecao["selection"]:
+                    pontos_selecionados = evento_selecao["selection"]["points"]
+                    if pontos_selecionados:
+                        # Resgata o valor do eixo X clicado (ex: "06 - June" ou "Semana 27")
+                        item_clicado = pontos_selecionados[0]["x"]
+                        st.info(f"🔍 Filtrado ativamente por: **{item_clicado}** (Clique fora das barras no gráfico para limpar o filtro)")
+                        # Aplica o filtro estrito no DataFrame original
+                        df_final_exibicao = df[df[eixo_tempo] == item_clicado]
+                
+                # --- METRICAS REATIVAS AO CLIQUE ---
                 col_m1, col_m2, col_m3 = st.columns(3)
-                col_m1.metric("Investimento Total acumulado", f"R$ {df['Total_Venda'].sum():,.2f}")
-                col_m2.metric("Média por transação", f"R$ {df['Total_Venda'].mean():,.2f}")
-                col_m3.metric("Volume Total de Itens", f"{int(df['Quantidade'].sum())} un")
+                col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
+                col_m2.metric("Média do Período Selecionado", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
+                col_m3.metric("Volume de Itens Alocados", f"{int(df_final_exibicao['Quantidade'].sum())} un")
+                
+                # Exibição da tabela dinâmica filtrada embaixo
+                st.write("### 📋 Detalhamento dos Registros Filtrados")
+                st.dataframe(df_final_exibicao.head(20))
                 
             else:
-                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda' para habilitar a inteligência temporal.")
+                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda'.")
                 
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
