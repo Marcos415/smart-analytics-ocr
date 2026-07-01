@@ -6,3 +6,4 @@ fpdf2
 pandas
 openpyxl
 pypdf
+altair

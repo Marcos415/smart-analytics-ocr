@@ -5,6 +5,7 @@ from PIL import Image
 from fpdf import FPDF
 import pandas as pd
 from pypdf import PdfReader
+import altair as alt
 
 # Configuração da página do Streamlit
 st.set_page_config(page_title="Smart Analytics & Document OCR", layout="wide", page_icon="📊")
@@ -49,7 +50,7 @@ def generar_pdf_bytes():
         pdf.set_font("Arial", "", 9)
         for linha in linhas:
             if ":" in linha:
-                parts = inline.split(":", 1)
+                parts = linha.split(":", 1)
                 pdf.set_font("Arial", "B", 9)
                 pdf.cell(60, 7, f" {parts[0].strip()}", border=1)
                 pdf.set_font("Arial", "", 9)
@@ -85,14 +86,14 @@ with tab1:
                 df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A')
                 df['Semana_Ano'] = "Semana " + df['Data'].dt.isocalendar().week.astype(str)
             
-            # --- BLOCO DE ANÁLISE GERENCIAL ---
+            # --- PAINEL GERENCIAL ---
             st.subheader("🎯 Painel de Controle de Tomada de Decisão")
             
             if 'Data' in df.columns and 'Total_Venda' in df.columns:
                 c1, c2 = st.columns(2)
                 with c1:
                     visao_tempo = st.selectbox(
-                        "Escolha o período do gráfico:",
+                        "Escolha o período de análise:",
                         ["Visão por Mês (Ano Completo)", "Visão por Semana (Foco de Curto Prazo)", "Visão por Dia da Semana (Operacional)"]
                     )
                 with c2:
@@ -108,32 +109,44 @@ with tab1:
                 else:
                     eixo_tempo = 'Dia_Semana'
                 
-                # Preparar dataframe agrupado para o gráfico
+                # Agrupamento dos dados base para o gráfico
                 df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
-                df_grafico = df_grafico.sort_values(by=eixo_tempo).set_index(eixo_tempo)
                 
-                # Renderização estável do gráfico (removido on_select)
-                st.bar_chart(df_grafico)
+                st.write("📊 **Clique direto em uma barra** para filtrar o painel inteiro. **Clique no fundo branco** do gráfico para limpar o filtro:")
                 
-                # --- FILTRO DINÂMICO COMPATÍVEL ---
-                st.write("---")
-                st.write("### 🔍 Inspeção Detalhada e Filtro de Período")
+                # --- ENGENHARIA DO GRÁFICO INTERATIVO COM ALTAIR (COMPATÍVEL) ---
+                # Cria a seleção baseada em clique na barra
+                selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
-                # Gera as opções únicas do período selecionado para o utilizador filtrar
-                opcoes_filtro = sorted(df[eixo_tempo].dropna().unique().tolist())
-                item_selecionado = st.selectbox(
-                    f"Selecione um item de **{eixo_tempo}** para detalhar os KPIs e registros abaixo:",
-                    ["Ver Ano Completo / Todos"] + opcoes_filtro
+                # Constrói o gráfico de barras dinâmico
+                grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
+                    x=alt.X(f'{eixo_tempo}:N', title=visao_tempo, sort=alt.EncodingSortField(field=eixo_tempo, order='ascending')),
+                    y=alt.Y(f'{metrica_analise}:Q', title=metrica_analise),
+                    # Muda a opacidade da barra se ela não estiver selecionada
+                    opacity=alt.condition(selecao_clique, alt.value(1.0), alt.value(0.35)),
+                    tooltip=[eixo_tempo, metrica_analise]
+                ).add_params(
+                    selecao_clique
+                ).properties(
+                    width='container',
+                    height=350
                 )
                 
-                # Variável base filtrada
-                if item_selecionado == "Ver Ano Completo / Todos":
-                    df_final_exibicao = df.copy()
-                else:
-                    df_final_exibicao = df[df[eixo_tempo] == item_selecionado]
-                    st.info(f"📊 Exibindo métricas exclusivas de: **{item_selecionado}**")
+                # Renderiza o gráfico e captura os dados de retorno do evento de clique
+                res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
-                # --- METRICAS REATIVAS ---
+                # Base padrão: Tudo selecionado
+                df_final_exibicao = df.copy()
+                
+                # Captura o item selecionado pelo clique nativo do Altair
+                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
+                    dados_selecionados = res_altair["selection"]["Selecione"]
+                    if dados_selecionados and eixo_tempo in dados_selecionados:
+                        valor_clicado = dados_selecionados[eixo_tempo][0]
+                        df_final_exibicao = df[df[eixo_tempo] == valor_clicado]
+                        st.info(f"⚡ Filtrado dinamicamente por: **{valor_clicado}**")
+                
+                # --- METRICAS REATIVAS AO CLIQUE ---
                 col_m1, col_m2, col_m3 = st.columns(3)
                 col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
                 col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
