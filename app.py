@@ -76,40 +76,63 @@ with tab1:
                 df = pd.read_excel(arquivo_planilha)
             
             st.success("Planilha carregada com sucesso!")
+            
+            # --- TRATAMENTO AUTOMÁTICO TEMPORAL COM PANDAS ---
+            if 'Data' in df.columns:
+                df['Data'] = pd.to_datetime(df['Data'])
+                df['Ano'] = df['Data'].dt.year
+                df['Mês'] = df['Data'].dt.strftime('%m - %B') # Ex: 06 - June
+                df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A') # Ex: 1 - Monday
+                df['Semana_Ano'] = "Semana " + df['Data'].dt.isocalendar().week.astype(str)
+            
             st.dataframe(df.head(10))
             
-            # --- GRÁFICO CORRIGIDO ---
-            st.subheader("Visualização Gráfica de Desempenho")
+            # --- BLOCO DE ANÁLISE GERENCIAL CRÍTICA ---
+            st.subheader("🎯 Painel de Controle de Tomada de Decisão")
             
-            # Tentativa de agrupar por uma coluna de texto (ex: Produto ou Categoria) e somar uma numérica (ex: Total_Venda)
-            colunas_texto = df.select_dtypes(include=['object', 'category']).columns.tolist()
-            colunas_numericas = df.select_dtypes(include=[np.number]).columns.tolist()
-            
-            # Remove ID_Pedido se existir para não estragar a lógica visual
-            if 'ID_Pedido' in colunas_numericas:
-                colunas_numericas.remove('ID_Pedido')
+            if 'Data' in df.columns and 'Total_Venda' in df.columns:
+                # Controles laterais ou em colunas superiores para fatiar o tempo
+                c1, c2 = st.columns(2)
+                with c1:
+                    visao_tempo = st.selectbox(
+                        "Escolha o período para analisar:",
+                        ["Visão por Mês (Ano Completo)", "Visão por Semana (Foco de Curto Prazo)", "Visão por Dia da Semana (Operacional)"]
+                    )
+                with c2:
+                    metrica_analise = st.selectbox(
+                        "Métrica analítica:",
+                        ["Total_Venda", "Quantidade"]
+                    )
                 
-            if colunas_texto and colunas_numericas:
-                eixo_x = colunas_texto[0] # Pega a primeira coluna de texto (ex: Produto)
-                eixo_y = colunas_numericas[-1] # Pega a última numérica (ex: Total_Venda)
+                # Aplicação da agregação de dados com base na escolha
+                if visao_tempo == "Visão por Mês (Ano Completo)":
+                    eixo_tempo = 'Mês'
+                elif visao_tempo == "Visão por Semana (Foco de Curto Prazo)":
+                    eixo_tempo = 'Semana_Ano'
+                else:
+                    eixo_tempo = 'Dia_Semana'
                 
-                st.write(f"📊 Gráfico: Total por **{eixo_x}** baseado em **{eixo_y}**")
+                # Agrupamento puro Pandas
+                df_filtrado = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
+                df_filtrado = df_filtrado.sort_values(by=eixo_tempo).set_index(eixo_tempo)
                 
-                # Consolida e agrupa para o gráfico não ficar repetido
-                df_grafico = df.groupby(eixo_x)[eixo_y].sum().reset_index()
-                df_grafico = df_grafico.set_index(eixo_x)
+                st.write(f"📊 Demonstrativo consolidado de **{metrica_analise}** sob a **{visao_tempo}**:")
+                st.bar_chart(df_filtrado)
                 
-                st.bar_chart(df_grafico)
-            elif len(colunas_numericas) >= 1:
-                st.bar_chart(df[colunas_numericas[0]].head(20))
+                # Resumo executivo em métricas numéricas abaixo do gráfico
+                col_m1, col_m2, col_m3 = st.columns(3)
+                col_m1.metric("Investimento Total acumulado", f"R$ {df['Total_Venda'].sum():,.2f}")
+                col_m2.metric("Média por transação", f"R$ {df['Total_Venda'].mean():,.2f}")
+                col_m3.metric("Volume Total de Itens", f"{int(df['Quantidade'].sum())} un")
+                
+            else:
+                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda' para habilitar a inteligência temporal.")
                 
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
 
 with tab2:
     st.header("Extração de Texto de Documentos (OCR / PDF)")
-    
-    # LIBERADO PDF E IMAGENS JUNTOS
     arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"])
     
     if arquivo_doc is not None:
@@ -119,28 +142,24 @@ with tab2:
         with col1:
             st.subheader("🖼️ Documento Enviado")
             if is_pdf:
-                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}. Clique no botão para extrair o texto estruturado nativamente.")
+                st.info(f"📄 Arquivo PDF detectado: {arquivo_doc.name}. Clique no botão para extrair os dados nativos.")
             else:
                 imagem = Image.open(arquivo_doc)
                 st.image(imagem, caption="Imagem Carregada", use_container_width=True)
             
             if st.button("🚀 Executar Leitura Documental", type="primary"):
-                with st.spinner("Processando conteúdo com IA..."):
+                with st.spinner("Processando conteúdo..."):
                     texto_cru = ""
-                    
                     if is_pdf:
-                        # Processamento ultra leve de PDF nativo com pypdf
                         leitor_pdf = PdfReader(arquivo_doc)
                         paginas_texto = [pagina.extract_text() for pagina in leitor_pdf.pages if pagina.extract_text()]
                         texto_cru = "\n".join(paginas_texto)
                     else:
-                        # Processamento tradicional EasyOCR para imagens
                         reader = easyocr.Reader(['pt', 'en'])
                         img_np = np.array(imagem)
                         resultado = reader.readtext(img_np, detail=0)
                         texto_cru = "\n".join(resultado)
                     
-                    # Inteligência de Mapeamento de Layout (DANFE padrão)
                     linhas_formatadas = ["=== TEXTO EXTRAÍDO ==="]
                     lines_raw = texto_cru.upper()
                     
@@ -153,7 +172,6 @@ with tab2:
                     if "SERRA VERDE" in lines_raw:
                         linhas_formatadas.append("Destinatario: AGROINDUSTRIAL SERRA VERDE LTDA")
                     
-                    # Fallback caso não dê match com o template conhecido
                     if len(linhas_formatadas) == 1:
                         for r in texto_cru.split('\n'):
                             if len(r.strip()) > 2:
@@ -172,7 +190,7 @@ with tab2:
                     height=400
                 )
             else:
-                st.info("O texto processado aparecerá aqui após clicar no botão.")
+                st.info("O texto processado aparecerá aqui.")
 
 with tab3:
     st.header("⚙️ Central de Emissão de Relatórios")
