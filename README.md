@@ -1,6 +1,6 @@
 # 📊 Smart Analytics & Document OCR Dashboard
 
-[![Streamlit App](https://static.streamlit.io/badge_svg.svg)](SEU_LINK_DO_STREAMLIT_AQUI)
+[![Streamlit App](https://static.streamlit.io/badge_svg.svg)](https://smart-analytics-ocr-as7b4huezl5wycqyppizes.streamlit.app/)
 
 Um sistema unificado de Inteligência de Negócios (BI) e Visão Computacional desenvolvido em Python. A aplicação resolve uma dor real das empresas: a automação da leitura de documentos fiscais/faturas (dados não estruturados) integrada a um ecossistema de análise de dados dinâmico e tomadas de decisão baseadas em dados.
 
