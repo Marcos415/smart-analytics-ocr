@@ -172,7 +172,7 @@ with tab1:
             st.error(f"Erro ao processar a planilha: {e}")
 
 # ==========================================
-# ABA 2: EXTRATOR OCR DINÂMICO CORRIGIDO (SEM ERROS)
+# ABA 2: EXTRATOR OCR DINÂMICO E SEGURO (SEM RERUN)
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
@@ -273,7 +273,6 @@ with tab2:
                                 
                     st.session_state["texto_extraido"] = "\n".join(linhas_formatadas)
                     st.success("Análise documental concluída!")
-                    st.rerun()
                     
         with col2:
             st.subheader("📝 Metadados Estruturados & Ajuste Manual")
