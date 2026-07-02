@@ -72,7 +72,7 @@ st.title("📊 Smart Analytics & Document OCR Dashboard")
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 # ==========================================
-# ABA 1: ANÁLISE DE DADOS (COM RANKING DINÂMICO DE PRODUTOS)
+# ABA 1: ANÁLISE DE DADOS (CORRIGIDA)
 # ==========================================
 with tab1:
     st.header("Análise Inteligente de Planilhas")
@@ -118,6 +118,7 @@ with tab1:
                 
                 df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
                 
+                # Seleção por clique (parâmetro nativo do Altair)
                 selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
                 grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
@@ -132,21 +133,28 @@ with tab1:
                     height=350
                 )
                 
+                # Renderiza o gráfico capturando interações de cliques
                 res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
                 df_final_exibicao = df.copy()
                 valor_clicado = None
                 
-                if res_altair and "selection" in res_altair["selection"]:
+                # --- EXTRAÇÃO RIGOROSA DA NOVA API DE SELEÇÃO DO STREAMLIT ---
+                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
-                    if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
-                        lista_valores = dados_selecionados[eixo_tempo]
-                        if lista_valores and len(lista_valores) > 0:
-                            valor_clicado = lista_valores[0]
-                    elif isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
-                        primeiro_ponto = dados_selecionados[0]
-                        if isinstance(primeiro_ponto, dict) and eixo_tempo in primeiro_ponto:
-                            valor_clicado = primeiro_ponto[eixo_tempo]
+                    
+                    if isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
+                        ponto = dados_selecionados[0]
+                        if isinstance(ponto, dict) and eixo_tempo in ponto:
+                            valor_clicado = ponto[eixo_tempo]
+                    elif isinstance(dados_selecionados, dict) and "value" in dados_selecionados:
+                        valores = dados_selecionados["value"]
+                        if isinstance(valores, list) and len(valores) > 0:
+                            valor_clicado = valores[0]
+                    elif isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
+                        valores = dados_selecionados[eixo_tempo]
+                        if isinstance(valores, list) and len(valores) > 0:
+                            valor_clicado = valores[0]
                 
                 if valor_clicado is not None:
                     df_final_exibicao = df[df[eixo_tempo] == valor_clicado]
@@ -154,7 +162,7 @@ with tab1:
                 else:
                     st.info("🌐 Exibindo Totais Consolidados (Ano Completo)")
                 
-                # --- CÁLCULO DO ITEM MAIS VENDIDO ---
+                # --- CÁLCULO DINÂMICO DO ITEM MAIS VENDIDO ---
                 item_mais_vendido = "Nenhum registro"
                 qtd_item_mais_vendido = 0
                 
@@ -163,14 +171,14 @@ with tab1:
                     qtd_item_mais_vendido = df_final_exibicao.groupby('Produto')['Quantidade'].sum().max()
                     item_mais_vendido = str(top_produto)
 
-                # Cards de Métricas atualizados para 4 colunas
+                # Cards de indicadores responsivos ao filtro
                 col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
                 col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
                 col_m3.metric("Volume de Itens Alocados", f"{int(df_final_exibicao['Quantidade'].sum())} un")
                 col_m4.metric("🏆 Mais Vendido (Período)", f"{item_mais_vendido}", f"{int(qtd_item_mais_vendido)} un")
                 
-                # --- GRÁFICO DE RANKING DOS TOP PRODUTOS ---
+                # --- GRÁFICO DE RANKING ATUALIZADO PELO FILTRO ---
                 if 'Produto' in df_final_exibicao.columns:
                     st.write("### 🔝 Ranking de Produtos no Período Selecionado")
                     df_produtos_ranking = df_final_exibicao.groupby('Produto')[['Quantidade', 'Total_Venda']].sum().reset_index()
@@ -259,7 +267,7 @@ with tab2:
                                         
                             if destinatario.startswith("Não identificado") and ("DESTINATARIO" in linha or "CLIENTE" in linha or "REMETENTE" in linha):
                                 if idx + 1 < len(linhas_originais):
-                                    destinatario = líneas_originais = linhas_originais[idx + 1].strip()
+                                    destinatario = linhas_originais[idx + 1].strip()
                                         
                             if "NUMERO" in linha or "NF-E" in linha or "NOTA" in linha or "Nº" in linha:
                                 num_filtrado = ''.join(c for c in linha if c.isdigit() or c in ['.', '-'])
