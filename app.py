@@ -72,7 +72,7 @@ st.title("📊 Smart Analytics & Document OCR Dashboard")
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 # ==========================================
-# ABA 1: ANÁLISE DE DADOS (INTERATIVIDADE REATIVADA)
+# ABA 1: ANÁLISE DE DADOS (COM RANKING DINÂMICO DE PRODUTOS)
 # ==========================================
 with tab1:
     st.header("Análise Inteligente de Planilhas")
@@ -118,7 +118,6 @@ with tab1:
                 
                 df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
                 
-                # Seleção por clique configurada no Altair
                 selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
                 
                 grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
@@ -133,14 +132,12 @@ with tab1:
                     height=350
                 )
                 
-                # Executa o gráfico capturando a reexecução do Streamlit
                 res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
                 
                 df_final_exibicao = df.copy()
                 valor_clicado = None
                 
-                # Recupera os dados da barra selecionada
-                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
+                if res_altair and "selection" in res_altair["selection"]:
                     dados_selecionados = res_altair["selection"]["Selecione"]
                     if isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
                         lista_valores = dados_selecionados[eixo_tempo]
@@ -157,15 +154,41 @@ with tab1:
                 else:
                     st.info("🌐 Exibindo Totais Consolidados (Ano Completo)")
                 
-                col_m1, col_m2, col_m3 = st.columns(3)
+                # --- CÁLCULO DO ITEM MAIS VENDIDO ---
+                item_mais_vendido = "Nenhum registro"
+                qtd_item_mais_vendido = 0
+                
+                if 'Produto' in df_final_exibicao.columns and not df_final_exibicao.empty:
+                    top_produto = df_final_exibicao.groupby('Produto')['Quantidade'].sum().idxmax()
+                    qtd_item_mais_vendido = df_final_exibicao.groupby('Produto')['Quantidade'].sum().max()
+                    item_mais_vendido = str(top_produto)
+
+                # Cards de Métricas atualizados para 4 colunas
+                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
                 col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
                 col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
                 col_m3.metric("Volume de Itens Alocados", f"{int(df_final_exibicao['Quantidade'].sum())} un")
+                col_m4.metric("🏆 Mais Vendido (Período)", f"{item_mais_vendido}", f"{int(qtd_item_mais_vendido)} un")
+                
+                # --- GRÁFICO DE RANKING DOS TOP PRODUTOS ---
+                if 'Produto' in df_final_exibicao.columns:
+                    st.write("### 🔝 Ranking de Produtos no Período Selecionado")
+                    df_produtos_ranking = df_final_exibicao.groupby('Produto')[['Quantidade', 'Total_Venda']].sum().reset_index()
+                    
+                    grafico_produtos = alt.Chart(df_produtos_ranking).mark_bar(color="#2e75b6").encode(
+                        x=alt.X(f'{metrica_analise}:Q', title=f"Total acumulado de {metrica_analise}"),
+                        y=alt.Y('Produto:N', title="Produtos", sort='-x'),
+                        tooltip=['Produto', 'Quantidade', 'Total_Venda']
+                    ).properties(
+                        width='container',
+                        height=220
+                    )
+                    st.altair_chart(grafico_produtos, use_container_width=True)
                 
                 st.write("### 📋 Detalhamento dos Registros")
                 st.dataframe(df_final_exibicao.head(20))
             else:
-                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data' e 'Total_Venda'.")
+                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data', 'Produto', 'Quantidade' e 'Total_Venda'.")
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
 
@@ -228,7 +251,7 @@ with tab2:
                             
                         for idx, linha in enumerate(linhas_maiusculas):
                             if "CNPJ" in linha or "C.N.P.J" in linha:
-                                cnpj_detectado = líneas_originais = linhas_originais[idx].strip()
+                                cnpj_detectado = linhas_originais[idx].strip()
                             
                             if fornecedor.startswith("Não identificado") and ("EMITENTE" in linha or "FORNECEDOR" in linha or "RAZAO" in linha):
                                 if idx + 1 < len(linhas_originais):
@@ -236,7 +259,7 @@ with tab2:
                                         
                             if destinatario.startswith("Não identificado") and ("DESTINATARIO" in linha or "CLIENTE" in linha or "REMETENTE" in linha):
                                 if idx + 1 < len(linhas_originais):
-                                    destinatario = linhas_originais[idx + 1].strip()
+                                    destinatario = líneas_originais = linhas_originais[idx + 1].strip()
                                         
                             if "NUMERO" in linha or "NF-E" in linha or "NOTA" in linha or "Nº" in linha:
                                 num_filtrado = ''.join(c for c in linha if c.isdigit() or c in ['.', '-'])
