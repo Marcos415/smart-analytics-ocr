@@ -72,7 +72,7 @@ st.title("📊 Smart Analytics & Document OCR Dashboard")
 tab1, tab2, tab3 = st.tabs(["📊 Análise de Dados", "🔍 Extrator OCR (Documentos)", "📝 Gerador de Relatórios"])
 
 # ==========================================
-# ABA 1: ANÁLISE DE DADOS (CORRIGIDA)
+# ABA 1: ANÁLISE DE DADOS COMPLETA E INTERATIVA (LINHA DO TEMPO POR SEMANAS)
 # ==========================================
 with tab1:
     st.header("Análise Inteligente de Planilhas")
@@ -87,116 +87,188 @@ with tab1:
             
             st.success("Planilha carregada com sucesso!")
             
+            # --- DETECÇÃO AUTOMÁTICA E MAPEAMENTO DE COMPATIBILIDADE ---
+            if 'Data' in df.columns or 'Total_Venda' in df.columns:
+                if 'Parceiro' not in df.columns and 'Produto' in df.columns:
+                    df['Parceiro'] = df['Produto']
+            elif 'Data de Emissão' in df.columns or 'Valor Nota Fiscal' in df.columns:
+                mapeamento_colunas = {
+                    'Data de Emissão': 'Data',
+                    'Valor Nota Fiscal': 'Total_Venda',
+                    'Quantidade Embarcada': 'Quantidade'
+                }
+                df.rename(columns=mapeamento_colunas, inplace=True)
+            
+            # --- TRATAMENTO ADAPTATIVO PADRÃO ---
+            if 'Total_Venda' in df.columns:
+                df['Total_Venda'] = pd.to_numeric(df['Total_Venda'], errors='coerce').fillna(0)
+            if 'Quantidade' in df.columns:
+                df['Quantidade'] = pd.to_numeric(df['Quantidade'], errors='coerce').fillna(0)
+            else:
+                df['Quantidade'] = 1
+                
+            if 'Produto' not in df.columns and 'Parceiro' in df.columns:
+                df['Produto'] = df['Parceiro']
+            
+            # --- TRATAMENTO TEMPORAL ULTRA ROBUSTO (MÚLTIPLOS FORMATOS) ---
             if 'Data' in df.columns:
-                df['Data'] = pd.to_datetime(df['Data'])
-                df['Ano'] = df['Data'].dt.year
+                # Conversão robusta aceitando formatos brasileiros (dia primeiro)
+                df['Data'] = pd.to_datetime(df['Data'], dayfirst=True, errors='coerce')
+                df = df.dropna(subset=['Data'])
+                
+                df['ANO'] = df['Data'].dt.year.astype(str)
                 df['Mês'] = df['Data'].dt.strftime('%m - %B')
                 df['Dia_Semana'] = df['Data'].dt.strftime('%w - %A')
-                df['Semana_Ano'] = "Semana " + df['Data'].dt.isocalendar().week.astype(str)
+                
+                # CÁLCULO DA SEMANA DENTRO DO MÊS
+                df['Semana_do_Mês'] = ((df['Data'].dt.day - 1) // 7) + 1
+                df['Semana_do_Mês'] = df['Semana_do_Mês'].astype(str) + "ª Semana"
+                
+                # --- NOVO: LINHA DO TEMPO CONTÍNUA (Ex: "01 - January | 1ª Semana") ---
+                df['Semana_do_Ano'] = df['Mês'] + " | " + df['Semana_do_Mês']
+                
+            elif 'ANO' in df.columns:
+                df['ANO'] = df['ANO'].astype(str)
             
-            st.subheader("🎯 Painel de Controle de Tomada de Decisão")
+            st.subheader("🎯 Painel de Controle e Destrinchamento Visual")
             
-            if 'Data' in df.columns and 'Total_Venda' in df.columns:
-                c1, c2 = st.columns(2)
-                with c1:
-                    visao_tempo = st.selectbox(
-                        "Escolha o período de análise:",
-                        ["Visão por Mês (Ano Completo)", "Visão por Semana (Foco de Curto Prazo)", "Visão por Dia da Semana (Operacional)"]
-                    )
-                with c2:
-                    metrica_analise = st.selectbox(
-                        "Métrica analítica:",
-                        ["Total_Venda", "Quantidade"]
-                    )
+            # --- OPÇÕES DE VISÃO NO SELECTBOX ESTRUTURADAS ---
+            opcoes_disponiveis = []
+            if 'Mês' in df.columns:
+                opcoes_disponiveis.append("Mês")
+            if 'Semana_do_Ano' in df.columns: # Adicionando a nova visão contínua!
+                opcoes_disponiveis.append("Semana_do_Ano")
+            if 'Semana_do_Mês' in df.columns:
+                opcoes_disponiveis.append("Semana_do_Mês")
+            if 'Dia_Semana' in df.columns:
+                opcoes_disponiveis.append("Dia_Semana")
+            if 'Parceiro' in df.columns:
+                opcoes_disponiveis.append("Parceiro")
+            if 'Nº Contrato' in df.columns:
+                opcoes_disponiveis.append("Nº Contrato")
+            if 'Produto' in df.columns and 'Parceiro' in df.columns: 
+                opcoes_disponiveis.append("Produto")
+            if 'ESTADO' in df.columns:
+                opcoes_disponiveis.append("ESTADO")
+            if 'ANO' in df.columns:
+                opcoes_disponiveis.append("ANO")
                 
-                if visao_tempo == "Visão por Mês (Ano Completo)":
-                    eixo_tempo = 'Mês'
-                elif visao_tempo == "Visão por Semana (Foco de Curto Prazo)":
-                    eixo_tempo = 'Semana_Ano'
-                else:
-                    eixo_tempo = 'Dia_Semana'
+            c1, c2 = st.columns(2)
+            with c1:
+                visao_analitica = st.selectbox(
+                    "Destrinchar o gráfico principal por:",
+                    opcoes_disponiveis,
+                    index=1 if "Semana_do_Ano" in opcoes_disponiveis else 0 # Já foca na Semana do Ano como padrão se existir!
+                )
+            with c2:
+                metrica_analise = st.selectbox(
+                    "Métrica analítica do gráfico:",
+                    ["Total_Venda", "Quantidade"]
+                )
+            
+            eixo_x_dinamico = visao_analitica
+            df_grafico = df.groupby(eixo_x_dinamico)[metrica_analise].sum().reset_index()
+            
+            # --- LISTAS DE ORDENAÇÃO CRONOLÓGICA ---
+            lista_meses_ordenada = [
+                "01 - January", "02 - February", "03 - March", "04 - April", 
+                "05 - May", "06 - June", "07 - July", "08 - August", 
+                "09 - September", "10 - October", "11 - November", "12 - December"
+            ]
+            lista_semanas_ordenada = ["1ª Semana", "2ª Semana", "3ª Semana", "4ª Semana", "5ª Semana"]
+            
+            # --- CONSTRUÇÃO DO GRÁFICO ---
+            selecao_clique = alt.selection_point(fields=[eixo_x_dinamico], name="Selecione")
+            titulo_eixo_y = "Valor Total (R$)" if metrica_analise == "Total_Venda" else "Volume Operacional / Qtd"
+            
+            if eixo_x_dinamico == "Mês":
+                config_eixo_x = alt.X('Mês:N', title="Meses do Ano", sort=lista_meses_ordenada)
+            elif eixo_x_dinamico == "Semana_do_Mês":
+                config_eixo_x = alt.X('Semana_do_Mês:N', title="Período Mensal", sort=lista_semanas_ordenada)
+            elif eixo_x_dinamico == "Semana_do_Ano":
+                # Como começa com "01 - January", a ordenação alfabética natural (ascending) ordena perfeitamente de Jan a Dez!
+                config_eixo_x = alt.X('Semana_do_Ano:N', title="Linha do Tempo (Semanas do Ano)", sort='ascending')
+            else:
+                ordenacao_eixo = 'ascending' if eixo_x_dinamico in ["ANO", "Dia_Semana"] else '-y'
+                config_eixo_x = alt.X(f'{eixo_x_dinamico}:N', title=f"Visualização por {visao_analitica}", sort=ordenacao_eixo)
+
+            grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
+                x=config_eixo_x,
+                y=alt.Y(f'{metrica_analise}:Q', title=titulo_eixo_y),
+                opacity=alt.condition(selecao_clique, alt.value(1.0), alt.value(0.35)),
+                tooltip=[eixo_x_dinamico, metrica_analise]
+            ).add_params(
+                selecao_clique
+            ).properties(
+                width='container',
+                height=350
+            )
+            
+            res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
+            
+            # --- MOTOR DE DETECÇÃO DO FILTRO POR CLIQUE ---
+            df_final_exibicao = df.copy()
+            valor_clicado = None
+            
+            if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
+                dados_selecionados = res_altair["selection"]["Selecione"]
                 
-                df_grafico = df.groupby(eixo_tempo)[metrica_analise].sum().reset_index()
+                if isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
+                    ponto = dados_selecionados[0]
+                    if isinstance(ponto, dict) and eixo_x_dinamico in ponto:
+                        valor_clicado = ponto[eixo_x_dinamico]
+                elif isinstance(dados_selecionados, dict):
+                    if "value" in dados_selecionados and isinstance(dados_selecionados["value"], list) and len(dados_selecionados["value"]) > 0:
+                        valor_clicado = dados_selecionados["value"][0]
+                    elif eixo_x_dinamico in dados_selecionados:
+                        val = dados_selecionados[eixo_x_dinamico]
+                        if isinstance(val, list) and len(val) > 0:
+                            valor_clicado = val[0]
+                        else:
+                            valor_clicado = val
+            
+            if valor_clicado is not None:
+                df_final_exibicao = df[df[eixo_x_dinamico].astype(str) == str(valor_clicado)]
+                st.info(f"⚡ Painel filtrado exclusivamente por {visao_analitica}: **{valor_clicado}**")
+            else:
+                st.info("🌐 Exibindo Totais Consolidados (Clique em uma barra para filtrar / Clique fora para limpar)")
+            
+            # --- CÁLCULO DINÂMICO DOS CARDS ---
+            campo_top_card = "Parceiro" if "Nº Contrato" in df.columns else "Produto"
+            nome_destaque = "Nenhum"
+            if campo_top_card in df_final_exibicao.columns and not df_final_exibicao.empty:
+                nome_destaque = str(df_final_exibicao.groupby(campo_top_card)['Total_Venda'].sum().idxmax())
                 
-                # Seleção por clique (parâmetro nativo do Altair)
-                selecao_clique = alt.selection_point(fields=[eixo_tempo], name="Selecione")
+            col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+            col_m1.metric("Valor Total Acumulado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
+            col_m2.metric("Média dos Registros", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
+            col_m3.metric("Volume/Qtd Total", f"{df_final_exibicao['Quantidade'].sum():,.0f} un")
+            col_m4.metric(f"🏆 Líder ({campo_top_card})", f"{nome_destaque}")
+            
+            # --- GRÁFICO DE RANKING SECUNDÁRIO ---
+            if 'Produto' in df_final_exibicao.columns:
+                titulo_ranking = "📦 Itens/Produtos movimentados no escopo" if "Nº Contrato" in df.columns else "📈 Desempenho por Categoria de Produto"
+                st.write(f"### {titulo_ranking}")
                 
-                grafico_altair = alt.Chart(df_grafico).mark_bar(color="#1f4e79").encode(
-                    x=alt.X(f'{eixo_tempo}:N', title=visao_tempo, sort=alt.EncodingSortField(field=eixo_tempo, order='ascending')),
-                    y=alt.Y(f'{metrica_analise}:Q', title=metrica_analise),
-                    opacity=alt.condition(selecao_clique, alt.value(1.0), alt.value(0.35)),
-                    tooltip=[eixo_tempo, metrica_analise]
-                ).add_params(
-                    selecao_clique
+                df_prod_rank = df_final_exibicao.groupby('Produto')[['Quantidade', 'Total_Venda']].sum().reset_index()
+                
+                grafico_produtos = alt.Chart(df_prod_rank).mark_bar(color="#2e75b6").encode(
+                    x=alt.X(f'{metrica_analise}:Q', title=f"Total de {metrica_analise}"),
+                    y=alt.Y('Produto:N', title="Item", sort='-x'),
+                    tooltip=['Produto', 'Quantidade', 'Total_Venda']
                 ).properties(
                     width='container',
-                    height=350
+                    height=220
                 )
-                
-                # Renderiza o gráfico capturando interações de cliques
-                res_altair = st.altair_chart(grafico_altair, use_container_width=True, on_select="rerun")
-                
-                df_final_exibicao = df.copy()
-                valor_clicado = None
-                
-                # --- EXTRAÇÃO RIGOROSA DA NOVA API DE SELEÇÃO DO STREAMLIT ---
-                if res_altair and "selection" in res_altair and "Selecione" in res_altair["selection"]:
-                    dados_selecionados = res_altair["selection"]["Selecione"]
-                    
-                    if isinstance(dados_selecionados, list) and len(dados_selecionados) > 0:
-                        ponto = dados_selecionados[0]
-                        if isinstance(ponto, dict) and eixo_tempo in ponto:
-                            valor_clicado = ponto[eixo_tempo]
-                    elif isinstance(dados_selecionados, dict) and "value" in dados_selecionados:
-                        valores = dados_selecionados["value"]
-                        if isinstance(valores, list) and len(valores) > 0:
-                            valor_clicado = valores[0]
-                    elif isinstance(dados_selecionados, dict) and eixo_tempo in dados_selecionados:
-                        valores = dados_selecionados[eixo_tempo]
-                        if isinstance(valores, list) and len(valores) > 0:
-                            valor_clicado = valores[0]
-                
-                if valor_clicado is not None:
-                    df_final_exibicao = df[df[eixo_tempo] == valor_clicado]
-                    st.info(f"⚡ Painel filtrado exclusivamente por: **{valor_clicado}**")
-                else:
-                    st.info("🌐 Exibindo Totais Consolidados (Ano Completo)")
-                
-                # --- CÁLCULO DINÂMICO DO ITEM MAIS VENDIDO ---
-                item_mais_vendido = "Nenhum registro"
-                qtd_item_mais_vendido = 0
-                
-                if 'Produto' in df_final_exibicao.columns and not df_final_exibicao.empty:
-                    top_produto = df_final_exibicao.groupby('Produto')['Quantidade'].sum().idxmax()
-                    qtd_item_mais_vendido = df_final_exibicao.groupby('Produto')['Quantidade'].sum().max()
-                    item_mais_vendido = str(top_produto)
-
-                # Cards de indicadores responsivos ao filtro
-                col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-                col_m1.metric("Investimento Consolidado", f"R$ {df_final_exibicao['Total_Venda'].sum():,.2f}")
-                col_m2.metric("Média do Período", f"R$ {df_final_exibicao['Total_Venda'].mean():,.2f}")
-                col_m3.metric("Volume de Itens Alocados", f"{int(df_final_exibicao['Quantidade'].sum())} un")
-                col_m4.metric("🏆 Mais Vendido (Período)", f"{item_mais_vendido}", f"{int(qtd_item_mais_vendido)} un")
-                
-                # --- GRÁFICO DE RANKING ATUALIZADO PELO FILTRO ---
-                if 'Produto' in df_final_exibicao.columns:
-                    st.write("### 🔝 Ranking de Produtos no Período Selecionado")
-                    df_produtos_ranking = df_final_exibicao.groupby('Produto')[['Quantidade', 'Total_Venda']].sum().reset_index()
-                    
-                    grafico_produtos = alt.Chart(df_produtos_ranking).mark_bar(color="#2e75b6").encode(
-                        x=alt.X(f'{metrica_analise}:Q', title=f"Total acumulado de {metrica_analise}"),
-                        y=alt.Y('Produto:N', title="Produtos", sort='-x'),
-                        tooltip=['Produto', 'Quantidade', 'Total_Venda']
-                    ).properties(
-                        width='container',
-                        height=220
-                    )
-                    st.altair_chart(grafico_produtos, use_container_width=True)
-                
-                st.write("### 📋 Detalhamento dos Registros")
-                st.dataframe(df_final_exibicao.head(20))
-            else:
-                st.warning("⚠️ Certifique-se de que sua planilha possui as colunas 'Data', 'Produto', 'Quantidade' e 'Total_Venda'.")
+                st.altair_chart(grafico_produtos, use_container_width=True)
+            
+            # --- DETALHAMENTO EM TABELA ---
+            st.write("### 📋 Relação Estruturada dos Dados")
+            colunas_possiveis = ['ANO', 'Mês', 'Semana_do_Mês', 'Semana_do_Ano', 'Nº Contrato', 'Parceiro', 'Nota Fiscal', 'Data', 'Total_Venda', 'Quantidade', 'ESTADO', 'Produto', 'Tipo']
+            colunas_exibicao = [c for c in colunas_possiveis if c in df_final_exibicao.columns]
+            
+            st.dataframe(df_final_exibicao[colunas_exibicao].head(50), use_container_width=True)
+            
         except Exception as e:
             st.error(f"Erro ao processar a planilha: {e}")
 
@@ -205,7 +277,7 @@ with tab1:
 # ==========================================
 with tab2:
     st.header("🔍 Extrator Avançado de Documentos (OCR / PDF)")
-    arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"])
+    arquivo_doc = st.file_uploader("Selecione o documento (Imagem ou PDF)", type=["png", "jpg", "jpeg", "pdf"], key="uploader_ocr_unico")
     
     col1, col2 = st.columns(2)
     
